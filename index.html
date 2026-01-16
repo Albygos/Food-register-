@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Mobile Attendance</title>
+
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet"/>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors:{
+        primary:"#192a43",
+        accent:"#A88E62",
+        success:"#427D56",
+        bg:"#f8f7f7"
+      },
+      fontFamily:{display:["Manrope","sans-serif"]}
+    }
+  }
+}
+</script>
+
+<style>
+body{font-family:Manrope,sans-serif;}
+.hide-scroll::-webkit-scrollbar{display:none;}
+</style>
+</head>
+
+<body class="bg-bg min-h-screen">
+
+<!-- LOADING OVERLAY -->
+<div id="loader" class="fixed inset-0 bg-white z-50 flex items-center justify-center">
+  <div class="flex flex-col items-center gap-3">
+    <div class="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+    <p class="text-xs font-semibold text-gray-500">Loading data…</p>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header class="sticky top-0 z-40 bg-bg border-b px-3 py-2 flex justify-between items-center">
+  <div>
+    <h1 class="text-lg font-bold">Attendance</h1>
+    <p class="text-[10px] tracking-widest uppercase text-gray-500">Daily Meal</p>
+  </div>
+  <button onclick="openModal()" class="material-symbols-outlined text-primary text-xl">
+    person_add
+  </button>
+</header>
+
+<!-- DATE PANEL -->
+<div id="dateChips" class="flex gap-2 overflow-x-auto hide-scroll px-3 py-2"></div>
+
+<main class="px-3 pb-24 space-y-3">
+
+<!-- SUMMARY -->
+<div class="bg-white rounded-xl p-3 shadow border text-xs font-semibold flex justify-between">
+  <span>Breakfast <span id="bf">0/0</span></span>
+  <span>Lunch <span id="lu">0/0</span></span>
+  <span>Dinner <span id="di">0/0</span></span>
+</div>
+
+<div class="flex justify-between items-center">
+  <h3 class="text-sm font-bold">DETAILS</h3>
+  <span id="count" class="text-[10px] bg-accent/10 text-accent px-2 py-1 rounded"></span>
+</div>
+
+<div id="cards" class="space-y-3"></div>
+</main>
+
+<!-- MODAL -->
+<div id="modal" class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50">
+  <div class="bg-white rounded-xl w-[90%] max-w-sm p-4 space-y-3">
+    <h3 class="font-bold text-sm">Manage Priests</h3>
+
+    <input id="newPriest" placeholder="PRIEST NAME"
+      class="w-full border rounded-lg p-2 text-sm uppercase"/>
+
+    <button onclick="addPriest()"
+      class="w-full bg-primary text-white py-2 rounded-lg text-sm font-bold">
+      ADD PRIEST
+    </button>
+
+    <div id="priestList" class="space-y-2 max-h-40 overflow-auto"></div>
+
+    <button onclick="closeModal()" class="w-full text-xs text-gray-500">Close</button>
+  </div>
+</div>
+
+<script>
+/* FIREBASE */
+firebase.initializeApp({
+  apiKey:"AIzaSyB8eIYzMPSgrfVGoQD6HjJklh_HKnr6Un4",
+  databaseURL:"https://form-3a4bd-default-rtdb.firebaseio.com"
+});
+const db=firebase.database();
+
+/* DATE */
+const now=new Date();
+const year=now.getFullYear();
+const month=now.getMonth();
+const monthKey=`${year}-${String(month+1).padStart(2,"0")}`;
+const today=now.toISOString().split("T")[0];
+let selected=today;
+
+/* DATE CHIPS */
+const days=new Date(year,month+1,0).getDate();
+for(let d=1;d<=days;d++){
+  const dt=new Date(year,month,d);
+  const key=dt.toISOString().split("T")[0];
+  if(key>=today){
+    const c=document.createElement("div");
+    c.className="h-8 px-3 rounded-lg text-xs font-semibold flex items-center bg-gray-200 whitespace-nowrap";
+    c.textContent=key===today?"Today":dt.toLocaleDateString("en",{month:"short",day:"numeric"});
+    c.onclick=()=>{selected=key;selectChip(c);loadAttendance();};
+    if(key===today)selectChip(c);
+    dateChips.appendChild(c);
+  }
+}
+function selectChip(a){
+  [...dateChips.children].forEach(x=>x.className="h-8 px-3 rounded-lg text-xs font-semibold flex items-center bg-gray-200 whitespace-nowrap");
+  a.className="h-8 px-3 rounded-lg text-xs font-semibold flex items-center bg-primary text-white whitespace-nowrap";
+}
+
+/* STATE */
+let priests=[];
+let priestsLoaded=false;
+let attendanceLoaded=false;
+
+/* LOAD PRIESTS */
+function loadPriests(){
+  db.ref("priests").once("value",s=>{
+    priests=[]; priestList.innerHTML="";
+    const d=s.val()||{};
+    Object.keys(d).forEach(id=>{
+      priests.push({id,name:d[id].name});
+      priestList.innerHTML+=`
+      <div class="flex justify-between items-center border p-2 rounded text-xs">
+        <span class="break-words w-full pr-2">${d[id].name}</span>
+        <button onclick="deletePriest('${id}')" class="material-symbols-outlined text-red-500 text-sm">delete</button>
+      </div>`;
+    });
+    count.textContent=priests.length+" PRIESTS";
+    priestsLoaded=true;
+    loadAttendance();
+  });
+}
+
+/* LOAD ATTENDANCE */
+function loadAttendance(){
+  attendanceLoaded=false;
+  db.ref(`attendance/${monthKey}/${selected}`).once("value",s=>{
+    const a=s.val()||{};
+    let b=0,l=0,d=0;
+    cards.innerHTML="";
+    priests.forEach(p=>{
+      const m=a[p.id]||{};
+      if(m.breakfast)b++; if(m.lunch)l++; if(m.dinner)d++;
+      cards.innerHTML+=`
+      <div class="bg-white rounded-xl p-3 border shadow">
+        <h4 class="font-bold text-sm mb-2 break-words">${p.name}</h4>
+        <div class="grid grid-cols-3 gap-2">
+          ${btn(p.id,"breakfast","cooking",m.breakfast)}
+          ${btn(p.id,"lunch","skillet",m.lunch)}
+          ${btn(p.id,"dinner","restaurant",m.dinner)}
+        </div>
+      </div>`;
+    });
+    bf.textContent=`${b}/${priests.length}`;
+    lu.textContent=`${l}/${priests.length}`;
+    di.textContent=`${d}/${priests.length}`;
+    attendanceLoaded=true;
+    checkLoaded();
+  });
+}
+
+function checkLoaded(){
+  if(priestsLoaded && attendanceLoaded){
+    loader.style.display="none";
+  }
+}
+
+function btn(id,meal,icon,on){
+  return `<button onclick="toggle('${id}','${meal}')"
+  class="py-2 rounded-lg text-xs font-bold flex flex-col items-center
+  ${on?"bg-success text-white":"bg-gray-100 text-gray-500"}">
+  <span class="material-symbols-outlined text-sm">${icon}</span>
+  ${meal.toUpperCase()}
+  </button>`;
+}
+
+function toggle(id,meal){
+  db.ref(`attendance/${monthKey}/${selected}/${id}/${meal}`).once("value",s=>{
+    db.ref(`attendance/${monthKey}/${selected}/${id}/${meal}`).set(!s.val());
+    loadAttendance();
+  });
+}
+
+/* MODAL */
+function openModal(){modal.classList.remove("hidden");modal.classList.add("flex");}
+function closeModal(){modal.classList.add("hidden");}
+
+function addPriest(){
+  const n=newPriest.value.trim().toUpperCase();
+  if(!n)return;
+  db.ref("priests").push({name:n});
+  newPriest.value="";
+  loadPriests();
+}
+
+function deletePriest(id){
+  if(confirm("Delete priest?")){
+    db.ref("priests/"+id).remove();
+    loadPriests();
+  }
+}
+
+/* INIT */
+loadPriests();
+</script>
+</body>
+</html>
