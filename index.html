@@ -13,9 +13,9 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <script>
-tailwind.config = {
-  theme: {
-    extend: {
+tailwind.config={
+  theme:{
+    extend:{
       colors:{
         primary:"#192a43",
         accent:"#A88E62",
@@ -36,7 +36,7 @@ body{font-family:Manrope,sans-serif;}
 
 <body class="bg-bg min-h-screen">
 
-<!-- LOADING OVERLAY -->
+<!-- LOADER -->
 <div id="loader" class="fixed inset-0 bg-white z-50 flex items-center justify-center">
   <div class="flex flex-col items-center gap-3">
     <div class="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
@@ -55,7 +55,7 @@ body{font-family:Manrope,sans-serif;}
   </button>
 </header>
 
-<!-- DATE PANEL -->
+<!-- DATE CHIPS -->
 <div id="dateChips" class="flex gap-2 overflow-x-auto hide-scroll px-3 py-2"></div>
 
 <main class="px-3 pb-24 space-y-3">
@@ -66,6 +66,11 @@ body{font-family:Manrope,sans-serif;}
   <span>Lunch <span id="lu">0/0</span></span>
   <span>Dinner <span id="di">0/0</span></span>
 </div>
+
+<!-- SEARCH (NO BORDER) -->
+<input id="search"
+placeholder="Search priest…"
+class="w-full rounded-xl p-2 text-sm bg-gray-100 outline-none"/>
 
 <div class="flex justify-between items-center">
   <h3 class="text-sm font-bold">DETAILS</h3>
@@ -81,11 +86,11 @@ body{font-family:Manrope,sans-serif;}
     <h3 class="font-bold text-sm">Manage Priests</h3>
 
     <input id="newPriest" placeholder="PRIEST NAME"
-      class="w-full border rounded-lg p-2 text-sm uppercase"/>
+    class="w-full border rounded-lg p-2 text-sm uppercase"/>
 
     <button onclick="addPriest()"
-      class="w-full bg-primary text-white py-2 rounded-lg text-sm font-bold">
-      ADD PRIEST
+    class="w-full bg-primary text-white py-2 rounded-lg text-sm font-bold">
+    ADD PRIEST
     </button>
 
     <div id="priestList" class="space-y-2 max-h-40 overflow-auto"></div>
@@ -102,15 +107,145 @@ firebase.initializeApp({
 });
 const db=firebase.database();
 
-/* DATE */
+/* DATE HELPERS */
+function localDateKey(d){
+  return d.toISOString().slice(0,10);
+}
+
 const now=new Date();
-const year=now.getFullYear();
-const month=now.getMonth();
-const monthKey=`${year}-${String(month+1).padStart(2,"0")}`;
-const today=now.toISOString().split("T")[0];
+const today=localDateKey(now);
+const monthKey=today.slice(0,7);
 let selected=today;
 
 /* DATE CHIPS */
+const daysInMonth=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+for(let d=1;d<=daysInMonth;d++){
+  const dt=new Date(now.getFullYear(),now.getMonth(),d);
+  const key=localDateKey(dt);
+  if(key>=today){
+    const c=document.createElement("div");
+    c.className="h-8 px-3 rounded-lg text-xs font-semibold flex items-center bg-gray-200 whitespace-nowrap";
+    c.textContent=key===today?"Today":dt.toLocaleDateString("en",{month:"short",day:"numeric"});
+    c.onclick=()=>{selected=key;selectChip(c);loadAttendance();};
+    if(key===today)selectChip(c);
+    dateChips.appendChild(c);
+  }
+}
+
+function selectChip(a){
+  [...dateChips.children].forEach(x=>x.className="h-8 px-3 rounded-lg text-xs font-semibold flex items-center bg-gray-200 whitespace-nowrap");
+  a.className="h-8 px-3 rounded-lg text-xs font-semibold flex items-center bg-primary text-white whitespace-nowrap";
+}
+
+/* STATE */
+let priests=[];
+let priestsLoaded=false;
+
+/* LOAD PRIESTS */
+function loadPriests(){
+  db.ref("priests").once("value",s=>{
+    priests=[];
+    priestList.innerHTML="";
+    const d=s.val()||{};
+    Object.keys(d).forEach(id=>{
+      priests.push({id,name:d[id].name});
+      priestList.innerHTML+=`
+      <div class="flex justify-between items-center border p-2 rounded text-xs">
+        <span class="w-full">${d[id].name}</span>
+        <button onclick="deletePriest('${id}')" class="material-symbols-outlined text-red-500 text-sm">delete</button>
+      </div>`;
+    });
+    count.textContent=priests.length+" PRIESTS";
+    priestsLoaded=true;
+    loadAttendance();
+  });
+}
+
+/* LOAD ATTENDANCE WITH SMART SEARCH + ALPHABET ORDER */
+function loadAttendance(){
+  db.ref(`attendance/${monthKey}/${selected}`).once("value",s=>{
+    const a=s.val()||{};
+    let b=0,l=0,dn=0;
+    cards.innerHTML="";
+
+    const q=search.value.toUpperCase();
+
+    const sorted = priests
+      .filter(p=>p.name.includes(q))
+      .sort((a,b)=>{
+        const aStart=a.name.startsWith(q);
+        const bStart=b.name.startsWith(q);
+        if(aStart && !bStart) return -1;
+        if(!aStart && bStart) return 1;
+        return a.name.localeCompare(b.name);
+      });
+
+    sorted.forEach(p=>{
+      const m=a[p.id]||{};
+      if(m.breakfast)b++;
+      if(m.lunch)l++;
+      if(m.dinner)dn++;
+
+      cards.innerHTML+=`
+      <div class="bg-white rounded-xl p-3 border shadow">
+        <h4 class="font-bold text-sm mb-2">${p.name}</h4>
+        <div class="grid grid-cols-3 gap-2">
+          ${btn(p.id,"breakfast","cooking",m.breakfast)}
+          ${btn(p.id,"lunch","skillet",m.lunch)}
+          ${btn(p.id,"dinner","restaurant",m.dinner)}
+        </div>
+      </div>`;
+    });
+
+    bf.textContent=`${b}/${priests.length}`;
+    lu.textContent=`${l}/${priests.length}`;
+    di.textContent=`${dn}/${priests.length}`;
+
+    if(priestsLoaded)loader.style.display="none";
+  });
+}
+
+function btn(id,meal,icon,on){
+  return `<button onclick="toggle('${id}','${meal}')"
+  class="py-2 rounded-lg text-xs font-bold flex flex-col items-center
+  ${on?"bg-success text-white":"bg-gray-100 text-gray-500"}">
+  <span class="material-symbols-outlined text-sm">${icon}</span>
+  ${meal.toUpperCase()}
+  </button>`;
+}
+
+function toggle(id,meal){
+  const ref=db.ref(`attendance/${monthKey}/${selected}/${id}/${meal}`);
+  ref.once("value",s=>ref.set(!s.val()).then(loadAttendance));
+}
+
+search.oninput=loadAttendance;
+
+/* MODAL */
+function openModal(){modal.classList.replace("hidden","flex");}
+function closeModal(){modal.classList.replace("flex","hidden");}
+
+function addPriest(){
+  const n=newPriest.value.trim().toUpperCase();
+  if(!n)return;
+  db.ref("priests").push({name:n});
+  newPriest.value="";
+  loadPriests();
+}
+
+function deletePriest(id){
+  if(confirm("Delete priest?")){
+    db.ref("priests/"+id).remove();
+    loadPriests();
+  }
+}
+
+/* INIT */
+loadPriests();
+</script>
+
+</body>
+</html>/* DATE CHIPS */
 const days=new Date(year,month+1,0).getDate();
 for(let d=1;d<=days;d++){
   const dt=new Date(year,month,d);
