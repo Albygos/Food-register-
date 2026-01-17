@@ -67,7 +67,7 @@ body{font-family:Manrope,sans-serif;}
   <span>Dinner <span id="di">0/0</span></span>
 </div>
 
-<!-- SEARCH (NO BORDER) -->
+<!-- SEARCH -->
 <input id="search"
 placeholder="Search priest…"
 class="w-full rounded-xl p-2 text-sm bg-gray-100 outline-none"/>
@@ -90,7 +90,7 @@ class="w-full rounded-xl p-2 text-sm bg-gray-100 outline-none"/>
 
     <button onclick="addPriest()"
     class="w-full bg-primary text-white py-2 rounded-lg text-sm font-bold">
-    ADD PRIEST
+      ADD PRIEST
     </button>
 
     <div id="priestList" class="space-y-2 max-h-40 overflow-auto"></div>
@@ -107,27 +107,32 @@ firebase.initializeApp({
 });
 const db=firebase.database();
 
-/* DATE HELPERS */
+/* ✅ LOCAL SAFE DATE */
 function localDateKey(d){
-  return d.toISOString().slice(0,10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,"0");
+  const da = String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${da}`;
 }
 
-const now=new Date();
-const today=localDateKey(now);
-const monthKey=today.slice(0,7);
-let selected=today;
+const now = new Date();
+const today = localDateKey(now);
+const monthKey = today.slice(0,7);
+let selected = today;
 
 /* DATE CHIPS */
-const daysInMonth=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
-for(let d=1;d<=daysInMonth;d++){
-  const dt=new Date(now.getFullYear(),now.getMonth(),d);
-  const key=localDateKey(dt);
-  if(key>=today){
-    const c=document.createElement("div");
+const daysInMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+
+for(let d=1; d<=daysInMonth; d++){
+  const dt = new Date(now.getFullYear(), now.getMonth(), d);
+  const key = localDateKey(dt);
+
+  if(key >= today){
+    const c = document.createElement("div");
     c.className="h-8 px-3 rounded-lg text-xs font-semibold flex items-center bg-gray-200 whitespace-nowrap";
-    c.textContent=key===today?"Today":dt.toLocaleDateString("en",{month:"short",day:"numeric"});
-    c.onclick=()=>{selected=key;selectChip(c);loadAttendance();};
-    if(key===today)selectChip(c);
+    c.textContent = key===today ? "Today" : dt.toLocaleDateString("en",{month:"short",day:"numeric"});
+    c.onclick=()=>{ selected=key; selectChip(c); loadAttendance(); };
+    if(key===today) selectChip(c);
     dateChips.appendChild(c);
   }
 }
@@ -151,17 +156,17 @@ function loadPriests(){
       priests.push({id,name:d[id].name});
       priestList.innerHTML+=`
       <div class="flex justify-between items-center border p-2 rounded text-xs">
-        <span class="w-full">${d[id].name}</span>
+        <span>${d[id].name}</span>
         <button onclick="deletePriest('${id}')" class="material-symbols-outlined text-red-500 text-sm">delete</button>
       </div>`;
     });
-    count.textContent=priests.length+" PRIESTS";
+    count.textContent = priests.length+" PRIESTS";
     priestsLoaded=true;
     loadAttendance();
   });
 }
 
-/* LOAD ATTENDANCE WITH SMART SEARCH + ALPHABET ORDER */
+/* LOAD ATTENDANCE */
 function loadAttendance(){
   db.ref(`attendance/${monthKey}/${selected}`).once("value",s=>{
     const a=s.val()||{};
@@ -170,38 +175,37 @@ function loadAttendance(){
 
     const q=search.value.toUpperCase();
 
-    const sorted = priests
+    priests
       .filter(p=>p.name.includes(q))
       .sort((a,b)=>{
-        const aStart=a.name.startsWith(q);
-        const bStart=b.name.startsWith(q);
-        if(aStart && !bStart) return -1;
-        if(!aStart && bStart) return 1;
+        const as=a.name.startsWith(q);
+        const bs=b.name.startsWith(q);
+        if(as&&!bs) return -1;
+        if(!as&&bs) return 1;
         return a.name.localeCompare(b.name);
+      })
+      .forEach(p=>{
+        const m=a[p.id]||{};
+        if(m.breakfast)b++;
+        if(m.lunch)l++;
+        if(m.dinner)dn++;
+
+        cards.innerHTML+=`
+        <div class="bg-white rounded-xl p-3 border shadow">
+          <h4 class="font-bold text-sm mb-2">${p.name}</h4>
+          <div class="grid grid-cols-3 gap-2">
+            ${btn(p.id,"breakfast","cooking",m.breakfast)}
+            ${btn(p.id,"lunch","skillet",m.lunch)}
+            ${btn(p.id,"dinner","restaurant",m.dinner)}
+          </div>
+        </div>`;
       });
-
-    sorted.forEach(p=>{
-      const m=a[p.id]||{};
-      if(m.breakfast)b++;
-      if(m.lunch)l++;
-      if(m.dinner)dn++;
-
-      cards.innerHTML+=`
-      <div class="bg-white rounded-xl p-3 border shadow">
-        <h4 class="font-bold text-sm mb-2">${p.name}</h4>
-        <div class="grid grid-cols-3 gap-2">
-          ${btn(p.id,"breakfast","cooking",m.breakfast)}
-          ${btn(p.id,"lunch","skillet",m.lunch)}
-          ${btn(p.id,"dinner","restaurant",m.dinner)}
-        </div>
-      </div>`;
-    });
 
     bf.textContent=`${b}/${priests.length}`;
     lu.textContent=`${l}/${priests.length}`;
     di.textContent=`${dn}/${priests.length}`;
 
-    if(priestsLoaded)loader.style.display="none";
+    if(priestsLoaded) loader.style.display="none";
   });
 }
 
@@ -209,8 +213,8 @@ function btn(id,meal,icon,on){
   return `<button onclick="toggle('${id}','${meal}')"
   class="py-2 rounded-lg text-xs font-bold flex flex-col items-center
   ${on?"bg-success text-white":"bg-gray-100 text-gray-500"}">
-  <span class="material-symbols-outlined text-sm">${icon}</span>
-  ${meal.toUpperCase()}
+    <span class="material-symbols-outlined text-sm">${icon}</span>
+    ${meal.toUpperCase()}
   </button>`;
 }
 
