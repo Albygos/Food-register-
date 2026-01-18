@@ -138,10 +138,16 @@ let priests=[],priestsLoaded=false;
 let mealFilter="all";
 
 /* SERVER IST (FIX) */
-db.ref(".info/serverTimeOffset").once("value",snap=>{
-  const offset=snap.val()||0;
-  const utc=Date.now()+offset;
-  now=new Date(utc+5.5*3600000);
+db.ref(".info/serverTimeOffset").once("value", snap => {
+  const offset = snap.val() || 0;
+
+  // Firebase server UTC time
+  const serverTime = Date.now() + offset;
+
+  // Convert to IST safely
+  now = new Date(
+    new Date(serverTime).toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+  );
 
   today=localDateKey(now);
   monthKey=today.slice(0,7);
