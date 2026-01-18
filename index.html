@@ -268,9 +268,31 @@ return `<button onclick="toggle('${id}','${meal}')" class="py-2 rounded-lg text-
 <span class="material-symbols-outlined text-sm">${icon}</span>${meal.toUpperCase()}</button>`;
 }
 
-function toggle(id,meal){
-db.ref(`attendance/${monthKey}/${selected}/${id}/${meal}`)
-.once("value",s=>db.ref(`attendance/${monthKey}/${selected}/${id}/${meal}`).set(!s.val()).then(loadAttendance));
+function toggle(btn, id, meal) {
+
+  // 🔥 1. INSTANT UI CHANGE
+  const isOn = btn.classList.contains("bg-success");
+
+  btn.classList.toggle("bg-success", !isOn);
+  btn.classList.toggle("text-white", !isOn);
+  btn.classList.toggle("bg-gray-100", isOn);
+  btn.classList.toggle("text-gray-500", isOn);
+
+  // 🔥 2. UPDATE COUNTER INSTANTLY
+  updateCount(meal, !isOn);
+
+  // 🔥 3. FIREBASE UPDATE (BACKGROUND)
+  db.ref(`attendance/${monthKey}/${selected}/${id}/${meal}`).set(!isOn);
+}
+function updateCount(meal, added) {
+  let el;
+
+  if (meal === "breakfast") el = bf;
+  if (meal === "lunch") el = lu;
+  if (meal === "dinner") el = di;
+
+  let [done, total] = el.textContent.split("/").map(Number);
+  el.textContent = `${added ? done + 1 : done - 1}/${total}`;
 }
 
 search.oninput=loadAttendance;
