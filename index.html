@@ -263,9 +263,15 @@ cards.classList.add("loaded-smooth");
 });
 }
 
-function btn(id,meal,icon,on){
-return `<button onclick="toggle('${id}','${meal}')" class="py-2 rounded-lg text-xs font-bold flex flex-col items-center ${on?"bg-success text-white":"bg-gray-100 text-gray-500"}">
-<span class="material-symbols-outlined text-sm">${icon}</span>${meal.toUpperCase()}</button>`;
+function btn(id, meal, icon, on) {
+  return `
+  <button
+    onclick="toggle(this,'${id}','${meal}')"
+    class="py-2 rounded-lg text-xs font-bold flex flex-col items-center ${on ? "bg-success text-white" : "bg-gray-100 text-gray-500"}"
+  >
+    <span class="material-symbols-outlined text-sm">${icon}</span>
+    ${meal.toUpperCase()}
+  </button>`;
 }
 
 function toggle(btn, id, meal) {
@@ -295,7 +301,11 @@ function updateCount(meal, added) {
   el.textContent = `${added ? done + 1 : done - 1}/${total}`;
 }
 
-search.oninput=loadAttendance;
+let searchTimer;
+search.oninput = () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(loadAttendance, 120);
+};
 
 /* MODAL */
 function openModal(){modal.classList.replace("hidden","flex");}
