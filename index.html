@@ -165,7 +165,13 @@ function buildDateChips(){
     if(key>=today){
       const c=document.createElement("div");
       c.className="h-8 px-3 rounded-lg text-xs font-semibold flex items-center bg-gray-200 whitespace-nowrap";
-      c.textContent=key===today?"Today":dt.toLocaleDateString("en",{month:"short",day:"numeric"});
+      c.textContent = key === today
+  ? "Today"
+  : dt.toLocaleDateString("en", {
+      weekday: "short",
+      month: "short",
+      day: "numeric"
+    });
       c.onclick=()=>{selected=key;selectChip(c);loadAttendance();};
       if(key===today)selectChip(c);
       dateChips.appendChild(c);
@@ -198,7 +204,7 @@ function setMeal(m){
   active.style.borderBottom = "2px solid #192a43";
   active.style.paddingBottom = "2px";
 
-  // 👇 START smooth loading animation
+  //  START smooth loading animation
   cards.classList.remove("loaded-smooth");
   cards.classList.add("loading-smooth");
 
@@ -276,7 +282,7 @@ function btn(id, meal, icon, on) {
 
 function toggle(btn, id, meal) {
 
-  // 🔥 1. INSTANT UI CHANGE
+  //  1. INSTANT UI CHANGE
   const isOn = btn.classList.contains("bg-success");
 
   btn.classList.toggle("bg-success", !isOn);
@@ -284,10 +290,10 @@ function toggle(btn, id, meal) {
   btn.classList.toggle("bg-gray-100", isOn);
   btn.classList.toggle("text-gray-500", isOn);
 
-  // 🔥 2. UPDATE COUNTER INSTANTLY
+  //  2. UPDATE COUNTER INSTANTLY
   updateCount(meal, !isOn);
 
-  // 🔥 3. FIREBASE UPDATE (BACKGROUND)
+  //  3. FIREBASE UPDATE (BACKGROUND)
   db.ref(`attendance/${monthKey}/${selected}/${id}/${meal}`).set(!isOn);
 }
 function updateCount(meal, added) {
